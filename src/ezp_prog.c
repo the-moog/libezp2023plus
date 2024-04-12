@@ -66,10 +66,11 @@ static void usb_packet_flip(usb_packet *packet) {
     packet->chip_id = htonl(packet->chip_id);
 }
 
-ezp_programmer *ezp_find_programmer() {
-    int ret = libusb_init_context(NULL, NULL, 0);
-    if (ret < 0) return NULL;
+int ezp_init() {
+    return libusb_init_context(NULL, NULL, 0);
+}
 
+ezp_programmer *ezp_find_programmer() {
     libusb_device_handle *handle = libusb_open_device_with_vid_pid(NULL, VID, PID);
     if (!handle) return NULL;
 
@@ -355,8 +356,76 @@ int ezp_test_flash(ezp_programmer *programmer, ezp_flash *type, uint32_t *chip_i
     }
 }
 
+static int LIBUSB_CALL
+hotplug_callback(libusb_context *ctx, libusb_device *dev, libusb_hotplug_event event, void *user_data) {
+    (void) ctx;
+    struct libusb_device_descriptor desc;
+    libusb_device_handle *handle = NULL;
+
+    int res = libusb_get_device_descriptor(dev, &desc);
+    if (LIBUSB_SUCCESS == res) {
+        switch (event) {
+            case LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED:
+                res = libusb_open(dev, &handle);
+                if (handle) libusb_close(handle);
+                if (LIBUSB_SUCCESS != res) {
+                    fprintf(stderr, "No access to device: %s\n", libusb_strerror((enum libusb_error) res));
+                    ((ezp_status_callback) user_data)(EZP_CONNECTED); //callback connected
+                } else {
+                    ((ezp_status_callback) user_data)(EZP_READY); //callback ready
+                }
+                break;
+            case LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT:
+                ((ezp_status_callback) user_data)(EZP_DISCONNECTED); //callback disconnected
+                break;
+        }
+    } else {
+        switch (event) {
+            case LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED:
+                printf("Device attached\n");
+                fprintf(stderr, "Error getting device descriptor: %s\n", libusb_strerror((enum libusb_error) res));
+                break;
+            case LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT:
+                printf("Device detached\n");
+                fprintf(stderr, "Error getting device descriptor: %s\n", libusb_strerror((enum libusb_error) res));
+                break;
+        }
+        ((ezp_status_callback) user_data)(EZP_DISCONNECTED); //callback disconnected
+    }
+
+    return 0;
+}
+
+int ezp_listen_programmer_status(ezp_status_callback callback) {
+    libusb_hotplug_callback_handle handle;
+
+    if (!libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
+        return EZP_HOTPLUG_UNSUPPORTED;
+    }
+
+    int res = libusb_hotplug_register_callback(NULL,
+                                               LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
+                                               0, VID, PID, LIBUSB_HOTPLUG_MATCH_ANY, hotplug_callback, callback,
+                                               &handle);
+    if (LIBUSB_SUCCESS != res) {
+        fprintf(stderr, "Error: libusb_hotplug_register_callback\n");
+        return EZP_LIBUSB_ERROR;
+    }
+
+    while (1) {
+        res = libusb_handle_events(NULL);
+        if (LIBUSB_SUCCESS != res) {
+            printf("libusb_handle_events() failed: %s\n", libusb_strerror((enum libusb_error) res));
+            return EZP_LIBUSB_ERROR;
+        }
+    }
+}
+
 void ezp_free_programmer(ezp_programmer *programmer) {
     libusb_close(programmer->handle);
     free(programmer);
+}
+
+void ezp_free() {
     libusb_exit(NULL);
 }
