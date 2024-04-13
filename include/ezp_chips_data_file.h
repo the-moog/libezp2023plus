@@ -48,8 +48,21 @@ typedef enum {
     VOLTAGE_5V = 2,
 } ezp_voltage;
 
+/**
+ * Read chips data from file
+ * @param data Buffer for data
+ * @param file File path
+ * @return Entries count if success, or EZP_ERROR_IO or EZP_ERROR_INVALID_FILE when an error occurred
+ */
 int ezp_chips_data_read(ezp_chip_data **data, const char *file);
 
+/**
+ * Write chips data in file
+ * @param data Buffer with data
+ * @param count Entries count
+ * @param file File path
+ * @return EZP_OK if success or EZP_ERROR_IO when an error occurred
+ */
 int ezp_chips_data_write(ezp_chip_data *data, size_t count, const char *file);
 
 #endif //LIBEZP2023PLUS_EZP_CHIPS_DATA_FILE_H
