@@ -8,32 +8,32 @@
 
 #define VID 0x1fc8
 #define PID 0x310b
-//#define EZP_DEBUG
+//#define PRINT_HEX
 
-#ifdef EZP_DEBUG
+#ifdef PRINT_HEX
 
 static void hexDump(const char *title, const void *addr, const int len) {
-    printf("%s:\n", title);
+    fprintf(stderr, "%s:\n", title);
 
     if (len <= 0) {
-        printf("  Invalid length: %d\n", len);
+        fprintf(stderr, "  Invalid length: %d\n", len);
         return;
     }
 
     const uint8_t *ptr = addr;
     for (int i = 0; i < len; ++i) {
         if (i != 0 && (i % 16) == 0) printf("\n");
-        printf(" %02x", ptr[i]);
+        fprintf(stderr, " %02x", ptr[i]);
     }
-    printf("\n");
+    fprintf(stderr, "\n");
 }
 
-#else
+#else //PRINT_HEX
 #define hexDump(...) while(0)
-#endif
+#endif //PRINT_HEX
 
 #define CHECK_RESULT(x, lambda) if (x != LIBUSB_SUCCESS) { \
-                            printf("LIBUSB ERROR: %d\n", x); \
+                            fprintf(stderr, "LIBUSB ERROR: %s\n", libusb_strerror((enum libusb_error) x)); \
                             lambda \
                         }
 
@@ -85,7 +85,7 @@ static int send_to_programmer(libusb_device_handle *handle, const uint8_t *data,
     int actual_size;
     int r = libusb_bulk_transfer(handle, LIBUSB_ENDPOINT_OUT | (isData ? 1 : 2),
                                  data, size, &actual_size, 1000);
-    if (actual_size != size) printf("Warning! actual_size != size");
+    if (actual_size != size) fprintf(stderr, "Warning! actual_size != size");
     return r;
 }
 
@@ -94,7 +94,7 @@ static int recv_from_programmer(libusb_device_handle *handle, uint8_t *data, int
     int r = libusb_bulk_transfer(handle, LIBUSB_ENDPOINT_IN | 2,
                                  data, size, &actual_size, 1000);
     hexDump("recv_from_programmer", data, size);
-    if (actual_size != size) printf("Warning! actual_size != size");
+    if (actual_size != size) fprintf(stderr, "Warning! actual_size != size");
     return r;
 }
 
@@ -369,7 +369,6 @@ hotplug_callback(libusb_context *ctx, libusb_device *dev, libusb_hotplug_event e
                 res = libusb_open(dev, &handle);
                 if (handle) libusb_close(handle);
                 if (LIBUSB_SUCCESS != res) {
-                    fprintf(stderr, "No access to device: %s\n", libusb_strerror((enum libusb_error) res));
                     ((ezp_status_callback) user_data)(EZP_CONNECTED); //callback connected
                 } else {
                     ((ezp_status_callback) user_data)(EZP_READY); //callback ready
@@ -382,14 +381,13 @@ hotplug_callback(libusb_context *ctx, libusb_device *dev, libusb_hotplug_event e
     } else {
         switch (event) {
             case LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED:
-                printf("Device attached\n");
-                fprintf(stderr, "Error getting device descriptor: %s\n", libusb_strerror((enum libusb_error) res));
+                fprintf(stderr, "Device attached, but...\n");
                 break;
             case LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT:
-                printf("Device detached\n");
-                fprintf(stderr, "Error getting device descriptor: %s\n", libusb_strerror((enum libusb_error) res));
+                fprintf(stderr, "Device detached, but...\n");
                 break;
         }
+        fprintf(stderr, "Error getting device descriptor: %s\n", libusb_strerror((enum libusb_error) res));
         ((ezp_status_callback) user_data)(EZP_DISCONNECTED); //callback disconnected
     }
 
@@ -407,17 +405,17 @@ int ezp_listen_programmer_status(ezp_status_callback callback) {
                                                LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
                                                0, VID, PID, LIBUSB_HOTPLUG_MATCH_ANY, hotplug_callback, callback,
                                                &handle);
-    if (LIBUSB_SUCCESS != res) {
+    CHECK_RESULT(res, {
         fprintf(stderr, "Error: libusb_hotplug_register_callback\n");
         return EZP_LIBUSB_ERROR;
-    }
+    })
 
     while (1) {
         res = libusb_handle_events(NULL);
-        if (LIBUSB_SUCCESS != res) {
-            printf("libusb_handle_events() failed: %s\n", libusb_strerror((enum libusb_error) res));
+        CHECK_RESULT(res, {
+            fprintf(stderr, "Error: libusb_handle_events\n");
             return EZP_LIBUSB_ERROR;
-        }
+        })
     }
 }
 
