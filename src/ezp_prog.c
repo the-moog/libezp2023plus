@@ -106,57 +106,21 @@ ezp_read_flash(ezp_programmer *programmer, uint8_t **data, ezp_chip_data *chip_d
 
     *data = (uint8_t *) malloc(chip_data->flash);
 
-    //send first packet with chip data 00 09
+    //send second packet with chip data 00 07
     usb_packet packet = {
-            .command = COMMAND_CHECK_CHIP,
+            .command = COMMAND_SET_CHIP_DATA,
             .clazz = chip_data->clazz,
             .algorithm = chip_data->algorithm,
             .flash_page_size = chip_data->flash_page,
             .delay = chip_data->delay,
             .flash_size = chip_data->flash,
             .chip_id = chip_data->chip_id,
-            .speed = (uint8_t) speed,
+            .speed = speed, //in original software: if chip is eeprom_24, then this field equals voltage.
+                            //maybe speed value is valid only for spi_flash
             .voltage = chip_data->voltage
     };
     usb_packet_flip(&packet);
     int ret = send_to_programmer(programmer->handle, (uint8_t *) &packet, sizeof(usb_packet), 0);
-    CHECK_RESULT(ret, {
-        free(*data);
-        *data = NULL;
-        return EZP_LIBUSB_ERROR;
-    })
-    //read response
-    ret = recv_from_programmer(programmer->handle, (uint8_t *) &packet, sizeof(usb_packet));
-    CHECK_RESULT(ret, {
-        free(*data);
-        *data = NULL;
-        return EZP_LIBUSB_ERROR;
-    })
-
-    //send reset packet 01 08
-    memset(&packet, 0, sizeof(usb_packet));
-    packet.command = COMMAND_RESET;
-    usb_packet_flip(&packet);
-    ret = send_to_programmer(programmer->handle, (uint8_t *) &packet, sizeof(usb_packet), 0);
-    CHECK_RESULT(ret, {
-        free(*data);
-        *data = NULL;
-        return EZP_LIBUSB_ERROR;
-    })
-
-    //send second packet with chip data 00 07
-    memset(&packet, 0, sizeof(usb_packet));
-    packet.command = COMMAND_SET_CHIP_DATA;
-    packet.clazz = chip_data->clazz;
-    packet.algorithm = chip_data->algorithm;
-    packet.flash_page_size = chip_data->flash_page;
-    packet.delay = chip_data->delay;
-    packet.flash_size = chip_data->flash;
-    packet.chip_id = chip_data->chip_id;
-    packet.speed = chip_data->voltage; //weird
-    packet.voltage = chip_data->voltage;
-    usb_packet_flip(&packet);
-    ret = send_to_programmer(programmer->handle, (uint8_t *) &packet, sizeof(usb_packet), 0);
     CHECK_RESULT(ret, {
         free(*data);
         *data = NULL;
@@ -225,51 +189,20 @@ int ezp_write_flash(ezp_programmer *programmer, const uint8_t *data, ezp_chip_da
     if (chip_data->flash % chip_data->flash_page != 0)
         return EZP_FLASH_SIZE_OR_PAGE_INVALID;
 
-    //send first packet with chip data 00 09
     usb_packet packet = {
-            .command = 9,
+            .command = COMMAND_SET_CHIP_DATA,
             .clazz = chip_data->clazz,
             .algorithm = chip_data->algorithm,
             .flash_page_size = chip_data->flash_page,
             .delay = chip_data->delay,
             .flash_size = chip_data->flash,
             .chip_id = chip_data->chip_id,
-            .speed = (uint8_t) speed,
+            .speed = speed, //in original software: if chip is eeprom_24, then this field equals voltage
+                            //maybe speed value is valid only for spi_flash
             .voltage = chip_data->voltage
     };
     usb_packet_flip(&packet);
     int ret = send_to_programmer(programmer->handle, (uint8_t *) &packet, sizeof(usb_packet), 0);
-    CHECK_RESULT(ret, {
-        return EZP_LIBUSB_ERROR;
-    })
-    //read response
-    ret = recv_from_programmer(programmer->handle, (uint8_t *) &packet, sizeof(usb_packet));
-    CHECK_RESULT(ret, {
-        return EZP_LIBUSB_ERROR;
-    })
-
-    //send reset packet 01 08
-    memset(&packet, 0, sizeof(usb_packet));
-    packet.command = COMMAND_RESET;
-    usb_packet_flip(&packet);
-    ret = send_to_programmer(programmer->handle, (uint8_t *) &packet, sizeof(usb_packet), 0);
-    CHECK_RESULT(ret, {
-        return EZP_LIBUSB_ERROR;
-    })
-
-    //send second packet with chip data 00 07
-    memset(&packet, 0, sizeof(usb_packet));
-    packet.command = COMMAND_SET_CHIP_DATA;
-    packet.clazz = chip_data->clazz;
-    packet.algorithm = chip_data->algorithm;
-    packet.flash_page_size = chip_data->flash_page;
-    packet.delay = chip_data->delay;
-    packet.flash_size = chip_data->flash;
-    packet.chip_id = chip_data->chip_id;
-    packet.speed = chip_data->voltage; //weird
-    packet.voltage = chip_data->voltage;
-    usb_packet_flip(&packet);
-    ret = send_to_programmer(programmer->handle, (uint8_t *) &packet, sizeof(usb_packet), 0);
     CHECK_RESULT(ret, {
         return EZP_LIBUSB_ERROR;
     })
