@@ -63,6 +63,10 @@ typedef struct {
     void *user_data;
 } internal_user_data;
 
+static libusb_hotplug_callback_handle hotplug_cb_handle;
+static volatile int status_listener_running = 0;
+static volatile int status_listener_finished = 0;
+
 static void usb_packet_flip(usb_packet *packet) {
     packet->command = htons(packet->command);
     packet->flash_page_size = htons(packet->flash_page_size);
@@ -336,8 +340,6 @@ hotplug_callback(libusb_context *ctx, libusb_device *dev, libusb_hotplug_event e
 }
 
 int ezp_listen_programmer_status(ezp_status_callback callback, void *user_data) {
-    libusb_hotplug_callback_handle handle;
-
     if (!libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
         return EZP_HOTPLUG_UNSUPPORTED;
     }
@@ -349,19 +351,22 @@ int ezp_listen_programmer_status(ezp_status_callback callback, void *user_data) 
     int res = libusb_hotplug_register_callback(NULL,
                                                LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
                                                0, VID, PID, LIBUSB_HOTPLUG_MATCH_ANY, hotplug_callback, &iud,
-                                               &handle);
+                                               &hotplug_cb_handle);
     CHECK_RESULT(res, {
         fprintf(stderr, "Error: libusb_hotplug_register_callback\n");
         return EZP_LIBUSB_ERROR;
     })
 
-    while (1) {
+    status_listener_running = 1;
+    while (status_listener_running) {
         res = libusb_handle_events(NULL);
         CHECK_RESULT(res, {
             fprintf(stderr, "Error: libusb_handle_events\n");
             return EZP_LIBUSB_ERROR;
         })
     }
+    status_listener_finished = 1;
+    return 0;
 }
 
 void ezp_free_programmer(ezp_programmer *programmer) {
@@ -370,5 +375,11 @@ void ezp_free_programmer(ezp_programmer *programmer) {
 }
 
 void ezp_free() {
+    if (status_listener_running) {
+        status_listener_running = 0;
+        libusb_hotplug_deregister_callback(NULL, hotplug_cb_handle);
+        while (!status_listener_finished) __asm__("nop");
+        status_listener_finished = 0;
+    }
     libusb_exit(NULL);
 }
