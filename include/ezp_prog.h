@@ -29,7 +29,7 @@ typedef enum {
 } ezp_status;
 
 typedef void (*ezp_callback)(uint32_t current, uint32_t max);
-typedef void (*ezp_status_callback)(ezp_status status);
+typedef void (*ezp_status_callback)(ezp_status status, void *user_data);
 
 /**
  * Init USB communication
@@ -79,7 +79,7 @@ int ezp_test_flash(ezp_programmer *programmer, ezp_flash *type, uint32_t *chip_i
  * @param callback
  * @return EZP_HOTPLUG_UNSUPPORTED, EZP_LIBUSB_ERROR. should never return if everything is ok
  */
-int ezp_listen_programmer_status(ezp_status_callback callback);
+int ezp_listen_programmer_status(ezp_status_callback callback, void *user_data);
 
 /**
  * Stop connection with programmer and free resources
