@@ -28,7 +28,7 @@ typedef enum {
     EZP_DISCONNECTED
 } ezp_status;
 
-typedef void (*ezp_callback)(uint32_t current, uint32_t max);
+typedef void (*ezp_callback)(uint32_t current, uint32_t max, void *user_data);
 typedef void (*ezp_status_callback)(ezp_status status, void *user_data);
 
 /**
@@ -52,7 +52,7 @@ ezp_programmer *ezp_find_programmer();
  * @param callback progress callback
  * @return EZP_OK when success. EZP_FLASH_SIZE_OR_PAGE_INVALID or EZP_LIBUSB_ERROR when an error occurred
  */
-int ezp_read_flash(ezp_programmer *programmer, uint8_t **data, ezp_chip_data *chip_data, ezp_speed speed, ezp_callback callback);
+int ezp_read_flash(ezp_programmer *programmer, uint8_t **data, ezp_chip_data *chip_data, ezp_speed speed, ezp_callback callback, void *user_data);
 
 /**
  * Write data into flash
@@ -63,7 +63,7 @@ int ezp_read_flash(ezp_programmer *programmer, uint8_t **data, ezp_chip_data *ch
  * @param callback progress callback
  * @return EZP_OK when success. EZP_FLASH_SIZE_OR_PAGE_INVALID or EZP_LIBUSB_ERROR when an error occurred
  */
-int ezp_write_flash(ezp_programmer *programmer, const uint8_t *data, ezp_chip_data *chip_data, ezp_speed speed, ezp_callback callback);
+int ezp_write_flash(ezp_programmer *programmer, const uint8_t *data, ezp_chip_data *chip_data, ezp_speed speed, ezp_callback callback, void *user_data);
 
 /**
  * Test chip model

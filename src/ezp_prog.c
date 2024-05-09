@@ -109,7 +109,7 @@ static int recv_from_programmer(libusb_device_handle *handle, uint8_t *data, int
 
 int
 ezp_read_flash(ezp_programmer *programmer, uint8_t **data, ezp_chip_data *chip_data, ezp_speed speed,
-               ezp_callback callback) {
+               ezp_callback callback, void *user_data) {
     if (chip_data->flash % chip_data->flash_page != 0)
         return EZP_FLASH_SIZE_OR_PAGE_INVALID;
 
@@ -166,7 +166,7 @@ ezp_read_flash(ezp_programmer *programmer, uint8_t **data, ezp_chip_data *chip_d
     size_t blocks_count = chip_data->flash / right_page_size;
     uint8_t *ptr = *data;
     for (size_t i = 0; i < blocks_count; ++i) {
-        if (callback) callback(i * right_page_size, chip_data->flash);
+        if (callback) callback(i * right_page_size, chip_data->flash, user_data);
         ret = recv_from_programmer(programmer->handle, ptr, right_page_size);
         CHECK_RESULT(ret, {
             free(*data);
@@ -194,7 +194,7 @@ ezp_read_flash(ezp_programmer *programmer, uint8_t **data, ezp_chip_data *chip_d
 }
 
 int ezp_write_flash(ezp_programmer *programmer, const uint8_t *data, ezp_chip_data *chip_data, ezp_speed speed,
-                    ezp_callback callback) {
+                    ezp_callback callback, void *user_data) {
     if (chip_data->flash % chip_data->flash_page != 0)
         return EZP_FLASH_SIZE_OR_PAGE_INVALID;
 
@@ -240,7 +240,7 @@ int ezp_write_flash(ezp_programmer *programmer, const uint8_t *data, ezp_chip_da
             return EZP_LIBUSB_ERROR;
         })
         ptr += right_page_size;
-        if (callback) callback(i * right_page_size, chip_data->flash);
+        if (callback) callback(i * right_page_size, chip_data->flash, user_data);
     }
 
     //send reset packet 01 08
