@@ -12,21 +12,49 @@
 
 #ifdef PRINT_HEX
 
-static void hexDump(const char *title, const void *addr, const int len) {
-    fprintf(stderr, "%s:\n", title);
+
+static void asciiDump(FILE * file, const void * addr, const unsigned int offset, const unsigned int len, const unsigned int pad) {
+    const uint8_t *ptr = addr;
+
+    for (unsigned int n = 0; n < pad; n++) fputc(' ', file);
+
+    for (unsigned int o = 0; o < len; o++) {
+        char c = ptr[offset + o];
+        if (c < 32 || c > 126) c='.';
+        fputc(c, file);
+    }
+}
+
+static void hexDump(FILE * file, const char *title, const void *addr, const unsigned int len) {
+    fprintf(file, "%s (%u bytes):\n", title, len);
 
     if (len <= 0) {
-        fprintf(stderr, "  Invalid length: %d\n", len);
+        fprintf(file, "  Invalid length: %d\n", len);
         return;
     }
 
     const uint8_t *ptr = addr;
-    for (int i = 0; i < len; ++i) {
-        if (i != 0 && (i % 16) == 0) printf("\n");
-        fprintf(stderr, " %02x", ptr[i]);
-    }
-    fprintf(stderr, "\n");
+
+    // TODO: Perfect other use cases
+    const unsigned bytes=1;
+    const unsigned cols=16;
+
+    unsigned rem=len;
+    unsigned row=0;
+    do {
+        unsigned row_len = rem > cols ? cols : rem;
+
+        fprintf(file, "%08X: ", row*cols);
+        for (unsigned col = 0; col < row_len; col++)
+            fprintf(file, " %0*x", bytes*2, ptr[(row * cols) + col]);
+        unsigned pad = (((cols - row_len) % cols) * ((bytes*2)+1)) + 1;
+        asciiDump(file, addr, row * cols, row_len, pad);
+        fprintf(file, "\n");
+        rem -= row_len;
+        row++;
+    } while (rem);
 }
+
 
 #else //PRINT_HEX
 #define hexDump(...) while(0)
@@ -90,10 +118,10 @@ ezp_programmer *ezp_find_programmer() {
 }
 
 static int send_to_programmer(libusb_device_handle *handle, const uint8_t *data, int size, uint8_t isData) {
-    hexDump("send_to_programmer", data, size);
+    hexDump(stderr, "send_to_programmer", data, size);
     int actual_size;
     int r = libusb_bulk_transfer(handle, LIBUSB_ENDPOINT_OUT | (isData ? 1 : 2),
-                                 data, size, &actual_size, 1000);
+                                 (uint8_t *)data, size, &actual_size, 1000);
     if (actual_size != size) fprintf(stderr, "Warning! actual_size != size");
     return r;
 }
@@ -101,8 +129,8 @@ static int send_to_programmer(libusb_device_handle *handle, const uint8_t *data,
 static int recv_from_programmer(libusb_device_handle *handle, uint8_t *data, int size) {
     int actual_size;
     int r = libusb_bulk_transfer(handle, LIBUSB_ENDPOINT_IN | 2,
-                                 data, size, &actual_size, 1000);
-    hexDump("recv_from_programmer", data, size);
+                                 (uint8_t *)data, size, &actual_size, 1000);
+    hexDump(stderr, "recv_from_programmer", data, size);
     if (actual_size != size) fprintf(stderr, "Warning! actual_size != size");
     return r;
 }
@@ -255,6 +283,16 @@ int ezp_write_flash(ezp_programmer *programmer, const uint8_t *data, ezp_chip_da
     return EZP_OK;
 }
 
+
+const char * const ezp_flash_enum_str[] = {
+    "SPI_FLASH",
+    "EEPROM_24",
+    "EEPROM_93",
+    "EEPROM_25",
+    "EEPROM_95",
+};
+
+
 int ezp_test_flash(ezp_programmer *programmer, ezp_flash *type, uint32_t *chip_id) {
     //send first packet with chip data 00 09
     usb_packet packet = {
@@ -283,10 +321,14 @@ int ezp_test_flash(ezp_programmer *programmer, ezp_flash *type, uint32_t *chip_i
 
     *type = buffer[0];
     *chip_id = htonl(*(uint32_t *) (buffer)) & ~(0xff << 24);
+    fprintf(stderr, "Type: ");
+    if (*type > 0 && *type <= 5) fprintf(stderr, "%s\n", ezp_flash_enum_str[(*type)-1]);
+    else fprintf(stderr, "Unknown\n");
+    fprintf(stderr, "ChipId: %08X\n", *chip_id);
     uint32_t programmer_code = htonl(*(uint32_t *) (buffer + 60));
+    fprintf(stderr, "Programmer: %08X\n", programmer_code);
 
-
-    if (programmer_code == 0x9a7336bd) {
+    if (programmer_code == 0x9A7336BD || programmer_code == 0xD4151DBC) {
         if (*type != 0) {
             *type -= 1;
             return EZP_OK;
